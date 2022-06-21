@@ -1,0 +1,42 @@
+---
+title: "R4DS_code_Communicate(26-30)"
+author: "Pete VZ"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This file contains code & workthroughs of the 1sd Ed of the R For Data Science book (R4DS): https://r4ds.had.co.nz/index.html. Each chapter will be indexed with a heading. There will also be notes on the book's information so that the exported Rmd file or the code below can be searched for particular topics (e.g., tidy data). 
+
+Also, consult the solutions manual: https://jrnold.github.io/r4ds-exercise-solutions/index.html
+
+This file is on chapters 26-30 and it covers RMarkdown and controlling graphics settings in ggplot. Ch 26 is just introduction.
+
+
+# ----*Chapter 27: RMarkdown*-----
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

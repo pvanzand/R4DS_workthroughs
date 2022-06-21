@@ -1,0 +1,2814 @@
+---
+title: "R4DS_code_Wrangle"
+author: "Pete VZ"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+This file contains code & workthroughs of the 1sd Ed of the R For Data Science book (R4DS): https://r4ds.had.co.nz/index.html. Each chapter will be indexed with a heading. There will also be notes on the book's information so that the exported Rmd file or the code below can be searched for particular topics (e.g., tidy data). 
+
+Also, consult the solutions manual: https://jrnold.github.io/r4ds-exercise-solutions/index.html
+
+
+This file is on chapters 9-16 and it covers wrangling, tibbles, data import, tidy data, relational data, strings, factors, and dates & times. Ch 9 is just introduction.
+
+```{r}
+#install packages
+library(tidyverse)
+```
+
+
+# ----*Chapter 10: Wrangling - Tibbles*-----
+
+Wrangling consists of importing, tidying, and transforming data. When importing data, we're usually working with tibbles, rather than R's traditional data.frame. Tibbles and data.frame are specific versions of data frames. I don't know the difference, but will at some point. (there is some information below, and you can see more here: https://tibble.tidyverse.org/articles/tibble.html)
+
+Most packages use data.frames, and the tidyverse relies on tibbles, so you will often need to convert data.frames to tibbles. It's easy to do with as_tibble():
+```{r}
+as_tibble(iris)
+```
+
+You can enter data into a tibble with individual vectors using tibble()
+
+```{r}
+tibble(
+  x = 1:5,
+  y = 1, #note that this just fills in a vector of 1s
+  z = x ^ 2 + y
+)
+```
+
+There are several differences between tibbles & data.frames (per https://tibble.tidyverse.org/articles/tibble.html), and most of these differences are subtle, but result in avoiding problems later on. Some differences - tibble()
+* doesn't adjust the names of variables
+* it doesn't convert strings to factors (have to do this intentionally)
+* stores names in a consistent way and not as special attributes
+* only recycles vectors of length 1 (since recycling longer vectors causes bugs)
+* prints in a format that is easy and consistent to interpret. These can be controlled with options.
+* printing (to screen) shows the column type
+* extracting & subsetting from a tibble has strict rules (see the vignette)
+
+Another way to create a table is with tribble(), which is a transposed tibble. This is used to create data headings as formulas.
+```{r}
+tribble(
+  ~x, ~y, ~z,
+  #--|--|----
+  "a", 2, 3.6,
+  "b", 1, 8.5
+)
+```
+
+#### 10.3 Options with tibbles
+
+You can control the number of rows and the width with n & Inf:
+```{r}
+nycflights13::flights |> 
+  print(n = 10, width = Inf)
+```
+
+#### 10.3.2 subsetting
+
+Sometimes you'll want to pull out a single variable from a tibble. You can specify the name [["name"]] or position [[1]] w/in square brackets, or just specify the name with a dollar sign $name.
+```{r}
+df <- tibble(
+  x = runif(5),
+  y = rnorm(5)
+)
+
+#extract by name w/ $
+df$x
+
+#extract by name w/ [[]]
+df[["x"]] #note that you need to enclose in "" here
+
+#extract by pos'n w/ [[]]
+df[[1]]
+```
+
+To use these with a pipe operator, you'll need the placeholder .
+Note that there is one difference in the 2 versions of the pipe operator here. |> doesn't currently (as of 6/22) support the . placeholder, but the magrittr pipe does.
+
+```{r}
+df %>% .$x #to use the . placeholder, use the magrittr pipe
+df %>% .[["y"]]
+```
+
+To extract a single column using the base pipe, use pull()
+```{r}
+df |> pull(x) # by name
+df |> pull(1) # by position
+```
+
+#### 10.4 tibbles with older code
+
+Older functions or packages won't deal with tibbles, so you have to convert them back to data.frames with as.data.frame():
+```{r}
+# create a tibble using backticks to control the format of the column names
+tb <- tibble(
+  `:)` = "smile", 
+  ` ` = "space",
+  `2000` = "number"
+)
+
+# convert to data.frame
+as.data.frame(tb) #prints it as data.frame
+#class(tb) 
+#now that it's converted, shows that it's a data.frame. I've commented it out to save space.
+```
+
+##### 10.5: Exercises
+
+1. How can you tell if an object is a tibble? Print out mtcars to see.
+```{r}
+class(mtcars)
+```
+
+2. Compare and contrast the following operations on a data.frame and equivalent tibble. What is different? Why might the default data frame behaviours cause you frustration?
+```{r}
+df <- data.frame(abc = 1, xyz = "a")
+df
+df$x
+df[, "xyz"]
+df[, c("abc", "xyz")]
+```
+
+Now make df into a tibble and do the same operations
+```{r}
+tbl <- as.tibble(df)
+tbl$x
+tbl[, "xyz"]
+tbl[, c("abc", "xyz")]
+```
+
+3. If you have the name of a variable stored in an object, e.g. var <- "mpg", how can you extract the reference variable from a tibble?
+```{r}
+miles_per_gal <- mtcars$mpg
+miles_per_gal2 <- mtcars |> pull(mpg)
+```
+
+4. Practice referring to non-syntactic names in the following data frame by:
+
+```{r}
+annoying <- tibble(
+  `1` = 1:10,
+  `2` = `1` * 2 + rnorm(length(`1`))
+)
+```
+
+a. Extracting the variable called 1.
+```{r}
+annoying |> pull(1)
+annoying$`1`
+annoying[[1]]
+```
+
+b. create a scatterplot of 1 v 2
+```{r}
+annoying |> ggplot(aes(x=`1`, y = `2`)) + geom_point()
+```
+
+c. Creating a new column called 3 which is 2 divided by 1
+```{r}
+(annoying2 <- annoying |> mutate(annoying, `3` = `2` / `1`))
+```
+
+d. Renaming the columns to one, two and three.
+```{r}
+annoying3 <- annoying2 |> 
+  rename('one' = `1`,
+         'two' = `2`,
+         'three' = `3`
+         )
+glimpse(annoying3)
+```
+
+5. What does tibble::enframe() do? When might you use it?
+I did a search with ?tibble::enframe(), and it says that it converts named atomic vectors or lists into 1 or 2 column data frames. An atomic vector is a vector created with the c() function.
+
+From the solutions book, enframe() converts named vectors to a data frame (a tibble) with names and values. Their example is below.
+```{r}
+enframe(c(a = 1, b = 2, c = 3))
+```
+
+6. What option controls how many additional column names are printed at the footer of a tibble?
+The options for print are in ?print.tbl and n_extra argument is the one you want. 
+
+# ----*Chapter 11 - Data import*-----
+
+The readr package handles a lot of functions with importing plain-text rectangular files into R. There will be others discussed later.
+```{r}
+# I don't know where to get this file, & they don't discuss how to write the path
+heights <- read_csv("data/heights.csv")
+```
+
+You can also supply an inline csv:
+```{r}
+read_csv("a,b,c
+1,2,3
+4,5,6")
+```
+
+In both of these examples, readr uses the first line to provide the column names. You may want to modify this if your file has metadata...
+
+```{r}
+read_csv("The first line of metadata
+  The second line of metadata
+  x,y,z
+  1,2,3,
+  4,5,6", skip = 2) # note that it recognizes the character return as a new line
+```
+
+Lines can also be skipped if they have # in front (as comments)
+```{r}
+read_csv("# A comment I want to skip
+  x,y,z
+  1,2,3
+  9, 8, 7", comment = "#")
+```
+
+Also, columns may not have names supplied in the data, in which case you'll want to skip them.
+You can use col_names = FALSE to tell read_csv() not to treat the first row as headings, and instead label them sequentially from X1 to Xn:
+
+```{r}
+read_csv("1,2,3\n4,5,6", col_names = FALSE)
+# note here the use of \n to separate lines (as a hard carrige return)
+```
+
+Alternatively you can pass col_names a character vector which will be used as the column names:
+```{r}
+read_csv("1,2,3\n4,5,6", col_names = c("x", "y", "z"))
+```
+
+Another option that commonly needs tweaking is na: this specifies the value (or values) that are used to represent missing values in your file (since R has good ability to handle NAs):
+```{r}
+read_csv("a,b,c\n1,2,.
+         7, 6, 6", na = ".")
+```
+
+#### read_csv() vs read.csv()
+
+What are the advantages of readr::read_csv() over base read.csv()? (Incidentally, read.csv() is what is taught in BCP)
+* it's ~ 10x faster
+* it produces tibbles, doesn’t convert character vectors to factors, doesn't use row names, and doesn't munge the column names.
+* because of the strings / factors issue, you'll need to convert columns to factors later if needed
+
+##### 11.2.2: Exercises
+
+1. What function would you use to read a file where fields were separated with
+“|”?
+From the sol'n page: Use the read_delim() function with the argument delim="|".
+
+2. Apart from file, skip, and comment, what other arguments do read_csv() and read_tsv() have in common?
+A ton (see here: https://readr.tidyverse.org/reference/read_delim.html)
+```{r}
+#you can also list off the arguments in common with this (from the sol'n)
+intersect(names(formals(read_csv)), names(formals(read_tsv)))
+```
+
+
+3. What are the most important arguments to read_fwf()?
+The file and the col_positions seem most important.
+
+4. Sometimes strings in a CSV file contain commas. To prevent them from causing problems they need to be surrounded by a quoting character, like " or '. By default, read_csv() assumes that the quoting character will be ". What argument to read_csv() do you need to specify to read the following text into a data frame?
+"x,y\n1,'a,b'"
+From sol'n: For read_delim(), we will will need to specify a delimiter, in this case ",", and a quote argument.
+```{r}
+x <- "x,y\n1,'a,b'"
+read_delim(x, ",", quote = "'")
+```
+
+However, this question is out of date. read_csv() now supports a quote argument, so the following code works.
+```{r}
+read_csv(x, quote = "'")
+```
+
+
+5. Identify what is wrong with each of the following inline CSV files. What happens when you run the code?
+```{r}
+read_csv("a,b\n1,2,3\n4,5,6") # a & b are the col names, but there are 3 cols of data
+```
+
+```{r}
+read_csv("a,b,c\n1,2\n1,2,3,4") # There are 3 col names, but 2 cols of data in 1st row, so NA is assigned
+# for the 2nd row, it ignores the comma and makes the values match the columns
+```
+
+```{r}
+read_csv("a,b\n\"1")
+# this is a bit of an unclear mess. 
+```
+
+```{r}
+read_csv("a,b\n1,2\na,b") #i'm not sure what the problem is or if there is one.
+#the type converts to a chr b.c. of the 2nd row of data
+```
+
+```{r}
+read_csv("a;b\n1;3") #was the ; a mistake? If it's the Euro delimiter, use read_csv2() instead
+```
+
+#### 11.3 parsing a vector
+
+It's helpful to first understand how individual vectors are parsed when read into R. These vectors can be individual values (like a single date) or a column that represents a variable. The functions that can control individual vectors are described below, then we cover parsing entire files of vectors.
+
+The parse_*() functions take a character vector and return a more specialised vector like a logical, integer, or date:
+```{r}
+str(parse_integer(c("1", "2", "3")))
+#>  int [1:3] 1 2 3
+str(parse_date(c("2010-01-01", "1979-10-14")))
+#>  Date[1:2], format: "2010-01-01" "1979-10-14"
+```
+
+Like all functions in the tidyverse, the parse_*() functions are uniform: the first argument is a character vector to parse, and the na argument specifies which strings should be treated as missing.
+
+There are eight particularly important parsers:
+1. parse_logical() and parse_integer()
+2. parse_double() is a strict numeric parser, and parse_number() is a flexible numeric parser. These are more complicated than you might expect because different parts of the world write numbers in different ways.
+3. parse_character() seems so simple that it shouldn’t be necessary. But one complication makes it quite important: character encodings.
+4. parse_factor() create factors, the data structure that R uses to represent categorical variables with fixed and known values.
+5. parse_datetime(), parse_date(), and parse_time() allow you to parse various date & time specifications. These are the most complicated because there are so many different ways of writing dates.
+
+
+##### 11.3.1 parsing numbers
+
+It seems like it should be straightforward to parse a number, but three problems make it tricky:
+
+1. People write numbers differently in different parts of the world. For example, some countries use . in between the integer and fractional parts of a real number, while others use ,.
+* the solution here is to use the locale setting and overriding the default of '.'
+
+2. Numbers are often surrounded by other characters that provide some context, like “$1000” or “10%”.
+* To handle this, parse_number() addresses the second problem: it ignores non-numeric characters before and after the number. This is particularly useful for currencies and percentages, but also works to extract numbers embedded in text.
+```{r}
+parse_number("$100")
+#> [1] 100
+parse_number("20%")
+#> [1] 20
+parse_number("It cost $123.45")
+#> [1] 123.45
+```
+
+3. Numbers often contain “grouping” characters to make them easier to read, like “1,000,000”, and these grouping characters vary around the world.
+* this requires both solutions from above
+```{r}
+# Used in America
+parse_number("$123,456,789")
+#> [1] 123456789
+
+# Used in many parts of Europe
+parse_number("123.456.789", locale = locale(grouping_mark = "."))
+#> [1] 123456789
+
+# Used in Switzerland
+parse_number("123'456'789", locale = locale(grouping_mark = "'"))
+#> [1] 123456789
+```
+
+##### 11.3.2 Strings
+
+While ASCII does a good job with English characters, it fails at non-American text. The most universal is UTF-8, which does a good job with everything except some older text files. This can be handled by specifying the most appropriate encoder, which can often be found in the data documentation. If not, readr provides guess_encoding() to help you figure it out. It’s not foolproof, and it works better when you have lots of text (unlike here), but it’s a reasonable place to start. Expect to try a few different encodings before you find the right one.
+
+```{r}
+x1 <- "El Ni\xf1o was particularly bad this year"
+x2 <- "\x82\xb1\x82\xf1\x82\xc9\x82\xbf\x82\xcd"
+
+parse_character(x1, locale = locale(encoding = "Latin1"))
+#> [1] "El Niño was particularly bad this year"
+parse_character(x2, locale = locale(encoding = "Shift-JIS"))
+#> [1] "こんにちは"
+```
+
+
+##### 11.3.3 Factors
+
+R uses factors to represent categorical variables that have a known set of possible values. See the sections below on strings and factors on how to work with these once they're in the dataset.
+
+
+##### 11.3.4 Dates, date-time, times
+
+parse_datetime() expects an ISO8601 date-time. ISO8601 is an international standard in which the components of a date are organised from biggest to smallest: year, month, day, hour, minute, second.
+```{r}
+parse_datetime("2010-10-01T2010")
+#> [1] "2010-10-01 20:10:00 UTC"
+# If time is omitted, it will be set to midnight
+parse_datetime("20101010")
+#> [1] "2010-10-10 UTC"
+```
+
+parse_date() expects a four digit year, a - or /, the month, a - or /, then the day:
+```{r}
+parse_date("2010/10/01")
+```
+
+parse_time() expects the hour, :, minutes, optionally : and seconds, and an optional am/pm specifier (base R doesn't have a good built in class for time data, so we use the one provided in the hms package:
+```{r}
+library(hms)
+parse_time("01:10 am")
+#> 01:10:00
+parse_time("20:10:01")
+#> 20:10:01
+```
+
+If these defaults don’t work for your data you can supply your own date-time format, built up of pieces that can be found online (& in R4DS chapters). Here are some examples.
+```{r}
+parse_date("01/02/15", "%m/%d/%y")
+#> [1] "2015-01-02"
+parse_date("01/02/15", "%d/%m/%y")
+#> [1] "2015-02-01"
+parse_date("01/02/15", "%y/%m/%d")
+#> [1] "2001-02-15"
+```
+
+##### 11.3.5 Exercises
+
+I've skipped a lot of the exercises here, but here's one that looks useful:
+7. Generate the correct format string to parse each of the following dates and times
+
+```{r}
+d1 <- "January 1, 2010"
+d2 <- "2015-Mar-07"
+d3 <- "06-Jun-2017"
+d4 <- c("August 19 (2015)", "July 1 (2015)")
+d5 <- "12/30/14" # Dec 30, 2014
+t1 <- "1705"
+t2 <- "11:15:10.12 PM"
+```
+
+```{r}
+parse_date(d1, "%B %d, %Y") #note the use of the spaces & the single comma, to match the input
+```
+
+```{r}
+parse_date(d2, "%Y-%b-%d")
+```
+
+```{r}
+parse_date(d3, "%d-%b-%Y")
+```
+
+```{r}
+#d4 <- c("August 19 (2015)", "July 1 (2015)")
+parse_date(d4, "%B %d (%Y)", "%B %d (%Y)")
+```
+
+```{r}
+#d5 <- "12/30/14" # Dec 30, 2014
+parse_date(d5, "%m/%d/%y")
+```
+
+```{r}
+#t1 <- "1705"
+parse_time(t1, "%H%M")
+```
+
+```{r}
+#t2 <- "11:15:10.12 PM"
+parse_time(t2, "%H:%M:%OS %p") #yikes!
+```
+
+
+#### 11.4 parsing a file
+
+Knowing how individual vectors (which turn into columns of a df) are parsed, we continue on to full data files. R does a decent job of guessing the right format of each vector, but there are times and ways to override the defaults.
+
+readr uses a heuristic that scans the first 1000 rows and guesses the data type. If the type doesn't match one of the 8 typical (or isn't consistent enough), it reads in the vector as a string.
+
+Two situations can mess up the heuristic, leading to the wrong parsing. 1) the first 1000 rows might not represent the full vector (e.g., values are integers to a point then decimals later), or 2) there might be a lot of NAs early on, which causes readr to assume that it's a logical vector.
+
+As part of the package, readr has a practice data set that illustrates these problems. 
+
+```{r}
+challenge <- read_csv(readr_example("challenge.csv"))
+#(Note the use of readr_example() which finds the path to one of the files included with the package)
+```
+You can view the lines that contain the problems. Note that new versions of the challenge file don't seem to be affected by these issues.
+```{r}
+problems(challenge)
+```
+
+
+In both of these situations a good solution is to control the default guess size, with guess_max
+```{r}
+challenge2 <- read_csv(readr_example("challenge.csv"), guess_max = 1001)
+```
+
+Another alternative is found in the text, where you can specify the type for each column. Look it up if you need it.
+
+
+#### 11.5 writing to a file
+
+You can also use write_csv() & write_tsv() to write a data file to disk. Both of them encode strings as UTF-8 and save dates and date-times as ISO8601 format for correct importing.
+
+The most important arguments are x (the data frame to save), and path (the location to save it). You can also specify how missing values are written with na, and if you want to append to an existing file.
+```{r}
+write_csv(challenge, "challenge.csv")
+challenge
+```
+
+If *.csv files aren't acceptable (b.c. types are lost, they're inefficient for large files, etc.), you can export using the feather package, which can be shared across languages.
+
+##### 11.6 other types of data
+
+To get other types of data into R, we recommend starting with the tidyverse packages listed below. They’re certainly not perfect, but they are a good place to start. For rectangular data:
+
+haven reads SPSS, Stata, and SAS files.
+
+readxl reads excel files (both .xls and .xlsx).
+
+DBI, along with a database specific backend (e.g. RMySQL, RSQLite, RPostgreSQL etc) allows you to run SQL queries against a database and return a data frame.
+
+For hierarchical data: use jsonlite (by Jeroen Ooms) for json, and xml2 for XML. Jenny Bryan has some excellent worked examples at https://jennybc.github.io/purrr-tutorial/.
+
+For other file types, try the R data import/export manual and the rio package.
+
+
+# ----*Chapter 12 - Tidy Data*-----
+
+There are three interrelated rules which make a dataset tidy:
+
+1. Each variable must have its own column.
+2. Each observation must have its own row.
+3. Each value must have its own cell.
+
+This boils down to an even simpler set of practical instructions:
+
+* Put each dataset in a tibble.
+* Put each variable in a column.
+
+Once data are tidied, you can use all of the packages more easily that assume data are in tidy format. Also, since R is vectorized, columns of variables are amenable to fast analysis.
+
+
+#### 12.3 pivoting
+
+The two most common problems with untidy data are that
+1. One variable might be spread across multiple columns.
+2. One observation might be scattered across multiple rows.
+
+To deal with these, we use pivot_longer() and pivot_wider()
+
+##### 12.3.1 pivot longer
+
+Sometimes, data are arranged where each column is another observation, like in the table below.
+```{r}
+table4a
+```
+
+To make it tidy, you need to put the two year columns into a single variable. For this, pivot_longer() is your tool.
+```{r}
+table4a |> 
+  pivot_longer(c('1999', '2000'), names_to = 'year', values_to = 'cases')
+#here, the arguments names_to & values_to are the new column names, and they can be chosen
+```
+
+This example uses c() to list off the columns, but any other method with the select() verb will work, including a range, a name, etc.
+
+Try this again with table4b:
+```{r}
+table4b
+```
+
+```{r}
+table4b |> pivot_longer(c('1999', '2000'), names_to = 'year', values_to = 'population')
+```
+
+Joining them together (which will be covered in relational data):
+```{r}
+tidy4a <- table4a %>% 
+  pivot_longer(c(`1999`, `2000`), names_to = "year", values_to = "cases")
+tidy4b <- table4b %>% 
+  pivot_longer(c(`1999`, `2000`), names_to = "year", values_to = "population")
+left_join(tidy4a, tidy4b)
+```
+
+##### 12.3.1 pivot wider
+
+Sometimes, observations are spread across multiple rows and they need to all be on the same row. For example, in table2, there are two rows for each country per year, but each country in a year should be in the same row (constitute a single observation per year).
+```{r}
+table2
+```
+
+This time, we only need two parameters:
+1) The column to take variable names from. These are what should've been used as separate column headings for the observation of interest. In this example, it’s type.
+2) The column to take values from. Here it’s count.
+```{r}
+pivot_wider(table2, names_from = type, values_from = count)
+```
+
+##### 12.3.3 Exercises
+
+1. Why are pivot_longer() and pivot_wider() not perfectly symmetrical?
+Carefully consider the following example:
+```{r}
+stocks <- tibble(
+  year   = c(2015, 2015, 2016, 2016),
+  half  = c(   1,    2,     1,    2),
+  return = c(1.88, 0.59, 0.92, 0.17)
+)
+head(stocks)
+```
+
+```{r}
+stocks_wider <- stocks %>% 
+  pivot_wider(names_from = year, values_from = return)
+
+stocks_longer <- stocks_wider |> 
+  pivot_longer(`2015`:`2016`, names_to = "year", values_to = "return")
+
+stocks_wider
+stocks_longer
+```
+
+They're not perfectly symmetrical (i.e., reversable), b.c. pivoting wider keeps the numeric value of year as a dbl, but pivot_longer changes year to a character. In other words, column type information is lost when a data frame is converted from wide to long.
+
+If you want to keep or override the data type, use the names_transform argument to pivot_longer(), which provides a function to coerce the column to a different data type.
+```{r}
+stocks %>%
+  pivot_wider(names_from = year, values_from = return)%>%
+  pivot_longer(`2015`:`2016`, names_to = "year", values_to = "return",
+               names_transform = list(year = as.numeric))
+```
+
+2. Why does this code fail?
+```{r}
+table4a %>% 
+  pivot_longer(c(1999, 2000), names_to = "year", values_to = "cases")
+```
+Looking at table4a, we see that the value types in the columns 1999 and 2000 are integers, but the column names need to be in quotes, since R thinks that c(1999, 2000) is asking for the 1999th & 2000th columns in a df w/ only 3 columns.
+```{r}
+table4a
+```
+
+3. What would happen if you widen this table? Why? How could you add a new column to uniquely identify each value?
+```{r}
+people <- tribble(
+  ~name,             ~key,  ~values,
+  #-----------------|--------|------
+  "Phillip Woods",   "age",       45,
+  "Phillip Woods",   "height",   186,
+  "Phillip Woods",   "age",       50,
+  "Jessica Cordero", "age",       37,
+  "Jessica Cordero", "height",   156
+)
+people
+```
+
+```{r}
+pivot_wider(people, names_from = 'key', values_from = 'values')
+```
+
+Widening this tibble prodcues a list of numerical values, and not the data. The issue is that the name and key columns do not uniquely identify rows. In particular, there are two rows with values for the age of “Phillip Woods”. The warning message gives you a suggestion for a solution (to drop duplicates). The other option is from the sol'n book: We could solve the problem by adding a row with a distinct observation count for each combination of name and key.
+
+```{r}
+people2 <- people %>%
+  group_by(name, key) %>%
+  mutate(obs = row_number())
+people2
+```
+
+Now it can be pivoted longer because the obs column provides something unique for pivot_wider to use to distinguish among.
+```{r}
+pivot_wider(people2, names_from="name", values_from = "values")
+```
+
+3. Tidy the simple tibble below. Do you need to make it wider or longer? What are the variables?
+```{r}
+preg <- tribble(
+  ~pregnant, ~male, ~female,
+  "yes",     NA,    10,
+  "no",      20,    12
+)
+preg
+```
+I need to make it longer.
+```{r}
+preg |> 
+  pivot_longer(cols = c('male', 'female'), names_to = 'sex', values_to = 'count')
+```
+
+
+#### 12.4 separating & uniting
+
+Have a look at table 3, which has a problem in that the rate variable contains two variables w/in it. It needs to be separated into two variables, then the rate should be calculated as a 3rd var.
+```{r}
+head(table3)
+```
+
+separate() pulls apart one column into multiple columns, by splitting wherever a separator character appears.
+```{r}
+table3 |> 
+  separate(col = rate, sep = "/", into = c('cases', 'population'))
+```
+
+We didn't have to explicitly state the separator, since it can usually determine this by finding the non-alphanumeric character (in this case, the "/", which is neither number or letter).
+
+There's another option that's really important here, because the default of separate() is to leave the vector as a string. We want to convert to numbers, so...
+```{r}
+table3 |> 
+  separate(col = rate, sep = '/', into = c('cases', 'population'), convert = TRUE)
+```
+
+You can also pass a vector of integers to sep. separate() will interpret the integers as positions to split at. Positive values start at 1 on the far-left of the strings; negative value start at -1 on the far-right of the strings.
+```{r}
+table3 %>% 
+  separate(year, into = c("century", "year"), sep = 2)
+```
+
+##### 12.4.2 Unite
+
+This is used less frequently, but it's good to know it's there.
+```{r}
+unite(table5, new_year, century, year)
+```
+
+To get rid of that annoying "_" char, specify the sep option
+```{r}
+unite(table5, new_year, century, year, sep = "")
+```
+
+##### 12.4.3 Exercises
+1. What do the extra and fill arguments do in separate()? Experiment with the various options for the following two toy datasets.
+
+```{r}
+prac1 <- tibble(x = c("a,b,c", "d,e,f,g", "h,i,j")) %>% 
+  separate(x, c("one", "two", "three"))
+
+prac2 <- tibble(x = c("a,b,c", "d,e", "f,g,i")) %>% 
+  separate(x, c("one", "two", "three"))
+```
+
+The extra argument tells separate() what to do if there are too many pieces, and the fill argument tells it what to do if there aren’t enough. By default, separate() drops extra values with a warning.
+
+Setting extra = "merge", then the extra values are not split, so "f,g" appears in column three. See the solution page for options.
+
+2. Both unite() and separate() have a remove argument. What does it do? Why would you set it to FALSE?
+It looks like it deletes the column of info after things have been united / separated. If set to FALSE, you'd keep the original. Maybe to check your work or b.c. you wanted that variable for something else later?
+
+
+#### *12.5 dealing with missing values*
+
+Changing the representation of a dataset brings up an important subtlety of missing values. Surprisingly, a value can be missing in one of two possible ways:
+
+* Explicitly, i.e. flagged with NA.
+* Implicitly, i.e. simply not present in the data.
+
+Here's an example...
+```{r}
+stocks <- tibble(
+  year   = c(2015, 2015, 2015, 2015, 2016, 2016, 2016),
+  qtr    = c(   1,    2,    3,    4,    2,    3,    4),
+  return = c(1.88, 0.59, 0.35,   NA, 0.92, 0.17, 2.66)
+)
+```
+
+...where the 4th quarter of 2015 has an NA, but quarter 1 of 2016 is implicitly missing. we can make the implicit missing value explicit by putting years in the columns so we can see that there are combinations that are missing.
+
+```{r}
+stocks %>% 
+  pivot_wider(names_from = year, values_from = return)
+```
+
+you can set values_drop_na = TRUE in pivot_longer() to turn explicit missing values implicit:
+```{r}
+stocks %>% 
+  pivot_wider(names_from = year, values_from = return) %>% 
+  pivot_longer(
+    cols = c(`2015`, `2016`), 
+    names_to = "year", 
+    values_to = "return", 
+    values_drop_na = TRUE
+  )
+```
+
+complete() takes a set of columns, and finds all unique combinations. It then ensures the original dataset contains all those values, filling in explicit NAs where necessary.
+```{r}
+stocks %>% 
+  complete(year, qtr)
+```
+
+Using fill() is important when a data source has primarily been used for data entry, missing values indicate that the previous value should be carried forward:
+```{r}
+treatment <- tribble(
+  ~ person,           ~ treatment, ~response,
+  "Derrick Whitmore", 1,           7,
+  NA,                 2,           10,
+  NA,                 3,           9,
+  "Katherine Burke",  1,           4
+)
+```
+
+
+```{r}
+treatment %>% 
+  fill(person)
+```
+
+#### 12.6 a data tidy case study
+
+The WHO has a huge dataset on global TB cases, but it's hard to work with in the untidy form.
+```{r}
+head(who)
+```
+
+This is a very typical real-life example dataset. It contains redundant columns, odd variable codes, and many missing values. In short, who is messy, and we’ll need multiple steps to tidy it. Like dplyr, tidyr is designed so that each function does one thing well. That means in real-life situations you’ll usually need to string together multiple verbs into a pipeline.
+
+The best place to start is almost always to gather together the columns that are not variables. For example, 
+* It looks like country, iso2, and iso3 are three variables that redundantly specify the country.
+* year is clearly also a variable.
+* We don’t know what all the other columns are yet, but given the structure in the variable names (e.g. new_sp_m014, new_ep_m014, new_ep_f014) these are likely to be values, not variables.
+
+```{r}
+who1 <- who %>% 
+  pivot_longer(
+    cols = new_sp_m014:newrel_f65, #this takes all of the columns that are values...
+    names_to = "key", #and unites them under 'key'
+    values_to = "cases", #and puts their values into 'cases'
+    values_drop_na = TRUE #and drops all of the NAs (since there are a lot)
+  )
+who1
+```
+
+We can get some hint of the structure of the values in the new key column by counting them:
+```{r}
+who1 |> count(key)
+```
+
+The key column has a code that gives a lot of information. We'll want to split this out into different variables with separate. But first, a bit of cleaning...
+
+It's hard to tell here unless you look carefully, but instead of new_rel we have newrel (it’s hard to spot this here but if you don’t fix it we’ll get errors in subsequent steps). This will fix it with a simple mutate() & str_replace()
+```{r}
+who2 <- who1 %>% 
+  mutate(key = stringr::str_replace(key, "newrel", "new_rel"))
+who2
+```
+
+We can separate the values in each code with two passes of separate(). The first pass will split the codes at each underscore.
+```{r}
+who3 <- who2 %>% 
+  separate(key, c("new", "type", "sexage"), sep = "_")
+who3
+```
+Then we might as well drop the new column because it’s constant in this dataset. While we’re dropping columns, let’s also drop iso2 and iso3 since they’re redundant.
+```{r}
+who4 <- who3 %>% 
+  select(-new, -iso2, -iso3)
+```
+
+Now we have to separate sex from age. Since sex is only 1 character at the beginning of each sexage entry, that makes this easy.
+```{r}
+who5 <- who4 %>% 
+  separate(sexage, c("sex", "age"), sep = 1)
+who5
+```
+
+Age looks a bit off here, because it's also a code. Despite that, the data are tidy & ready to be worked with. 
+
+In terms of form and process, this isn't how we'd normally work. Instead, it should be done with one complex piping operation:
+```{r}
+who %>%
+  pivot_longer(
+    cols = new_sp_m014:newrel_f65, 
+    names_to = "key", 
+    values_to = "cases", 
+    values_drop_na = TRUE
+  ) %>% 
+  mutate(
+    key = stringr::str_replace(key, "newrel", "new_rel")
+  ) %>%
+  separate(key, c("new", "var", "sexage")) %>% 
+  select(-new, -iso2, -iso3) %>% 
+  separate(sexage, c("sex", "age"), sep = 1)
+```
+
+##### Some exercises
+Exercise 4. For each country, year, and sex compute the total number of cases of TB. Make an informative visualisation of the data.
+```{r}
+who5 |> 
+  group_by(country, year, sex) |> 
+  filter(year > 1995) |> 
+  summarize(cases = sum(cases)) |> 
+  unite(country_sex, country, sex, remove = FALSE) |> 
+    ggplot(aes(x = year, y = cases, group = country_sex, colour = sex)) +
+  geom_line()
+```
+
+
+# ----*Chapter 13 - Relational Data*-----
+
+Typical analytics projects involve multiple data sources. Collectively, multiple tables of data are called relational data because it is the relations, not just the individual datasets, that are important. The properties of all of the joined datasets are built out of relations between 2 datasets at a time.
+
+There are 3 families of verbs used in databases for working with multiple datasets.
+* mutating joins - add new variables to one df from matching obs in another
+* filtering joins - filter obs from one df based on whether they match an obs in the other table
+* set operations - treat obs as though they are set elements(?)
+
+```{r}
+#we'll need the following 2 libraries here
+library(tidyverse)
+library(nycflights13)
+```
+
+nycflights13 contains four tibbles that are related to the flights table that you used in data transformation:
+
+For reference, here is the flights table:
+```{r}
+flights
+```
+
+
+airlines lets you look up the full carrier name from its abbreviated code:
+```{r}
+airlines
+```
+
+airports gives information about each airport, identified by the faa airport code:
+```{r}
+airports
+```
+
+planes gives information about each plane, identified by its tailnum:
+```{r}
+planes
+```
+
+weather gives the weather at each NYC airport for each hour:
+```{r}
+weather
+```
+
+##### 13.2.1 Exercises
+
+1. Imagine you wanted to draw (approximately) the route each plane flies from its origin to its destination. What variables would you need? What tables would you need to combine?
+
+There's a really awesome answer in the sol'n manual:
+Drawing the routes requires the latitude and longitude of the origin and the destination airports of each flight. This requires the flights and airports tables. The flights table has the origin (origin) and destination (dest) airport of each flight. The airports table has the longitude (lon) and latitude (lat) of each airport. 
+
+To get the latitude and longitude for the origin and destination of each flight, requires two joins for flights to airports, once for the latitude and longitude of the origin airport, and once for the latitude and longitude of the destination airport. I use an inner join in order to drop any flights with missing airports since they will not have a longitude or latitude.
+```{r}
+flights_latlon <- flights %>%
+  inner_join(select(airports, origin = faa, origin_lat = lat, origin_lon = lon),
+    by = "origin" #this pulls in 2 cols (lat & lon) for the origin airport
+  ) %>%
+  inner_join(select(airports, dest = faa, dest_lat = lat, dest_lon = lon),
+    by = "dest" #this pulls in 2 more cols (lat & lon) for the destination airport
+  )
+flights_latlon
+```
+
+BONUS: this plots the approximate flight paths of the first 100 flights in the flights dataset.
+```{r}
+flights_latlon %>%
+  slice(1:100) %>%
+  ggplot(aes(
+    x = origin_lon, xend = dest_lon, #this is the syntax for plotting segments
+    y = origin_lat, yend = dest_lat
+  )) +
+  borders("state") +
+  geom_segment(arrow = arrow(length = unit(0.1, "cm"))) + #this plots a straight line from x to y
+  coord_quickmap() +
+  labs(y = "Latitude", x = "Longitude")
+```
+
+#### 13.3 Keys
+
+Keys are information used to join or connect 2 tables. Sometimes, this information only requires 1 variable (e.g., tailnum), but at other times multiple variables are needed to generate unique connections between tables (e.g., for the weather for a flight, you need year, month, day, hour, and origin; that is, weather has 5 primary keys (or is it better to say that the primary key consists of 5 variables?)).
+
+There are 2 types of keys: primary and foreign.
+* Primary key - uniquely identifies an observation in its own table. For example, planes$tailnum is a primary key because it uniquely identifies each plane in the planes table.
+* Foreign key - uniquely identifies an observation in another table. For example, flights$tailnum is a foreign key (in the flights table) because it appears in the flights table where it matches each flight to a unique plane (in the planes table).
+
+A variable can be both a primary key and a foreign key. For example, origin is part of the weather primary key, and is also a foreign key for the airports table.
+
+Once you’ve identified the primary keys in your tables, it’s good practice to verify that they do indeed uniquely identify each observation. One way to do that is to count() the primary keys and look for entries where n is greater than one:
+```{r}
+planes %>% 
+  count(tailnum) %>% 
+  filter(n > 1) 
+#the output here shows that there are no cases where tailnum occurs on > 1 row 
+```
+
+```{r}
+weather %>% 
+  count(year, month, day, hour, origin) %>% 
+  filter(n > 1)
+#ope, here there are some non-unique observations. Does that mean that there are issues with the primary key, or that there are errors in the data? See below for an answer & solution.
+```
+
+Sometimes a table doesn’t have an explicit primary key: each row is an observation, but no combination of variables reliably identifies it. For example, what’s the primary key in the flights table? You might think it would be the date plus the flight or tail number, but neither of those are unique:
+```{r}
+flights |> 
+  count(year, month, day, flight) |> 
+  filter(n > 1)
+```
+
+##### Surrogate keys
+When starting to work with this data, I had naively assumed that each flight number would be only used once per day: that would make it much easier to communicate problems with a specific flight. Unfortunately that is not the case! If a table lacks a primary key, it’s sometimes useful to add one with mutate() and row_number(). That makes it easier to match observations if you’ve done some filtering and want to check back in with the original data. This is called a surrogate key.
+
+##### 13.3.1 Exercises
+
+1. Add a surrogate key to flights.
+```{r}
+flights_key <- flights |> 
+  mutate(key = row_number())
+flights_key
+#note that in the sol'n page, they sorted things by year, month, day, etc. first so the key was in some logical order. They also called it flight_id
+```
+
+2. Identify the keys in the following datasets (assuming they mean primary keys)
+
+Lahman::Batting,
+babynames::babynames
+nasaweather::atmos
+fueleconomy::vehicles
+ggplot2::diamonds
+
+```{r}
+Lahman::Batting
+Lahman::Batting |> 
+  count(playerID, yearID, stint) |> #stint was important here, b.c. it differentiates the number of times they were added to a team
+  filter(n > 1)
+```
+
+```{r}
+babynames::babynames
+babynames::babynames |> 
+  count(sex, name, year) |> 
+  filter(n > 1)
+```
+fueleconomy::vehicles
+ggplot2::diamonds
+```{r}
+nasaweather::atmos
+nasaweather::atmos |> 
+  count(lat, long, year, month) |> 
+  filter(n > 1)
+```
+
+```{r}
+fueleconomy::vehicles
+fueleconomy::vehicles |> 
+  count(id) |> 
+  filter(n > 1)
+```
+
+#### 13.4 Mutating joins
+
+A mutating join allows you to combine variables from two tables. It first matches observations by their keys, then copies across variables from one table to the other. Like mutate(), the join functions add variables to the right, so if you have a lot of variables already, the new variables won’t get printed out.
+```{r}
+flights2 <- flights %>% 
+  select(year:day, hour, origin, dest, tailnum, carrier)
+#this makes the df smaller so we can see what we add later
+flights2
+```
+
+###### Left join
+```{r}
+flights2 %>%
+  select(-origin, -dest) %>% #take everything but origin & carrier
+  left_join(airlines, by = "carrier") #from airlines table, add everything using carrier as key
+```
+Note that this doesn't have to provide a row by row matching of observations. Instead, it calls every value of UA in the carrier vector and matches it with the corresponding name.
+
+Set up a couple of tables for examples:
+```{r}
+x <- tribble(
+  ~key, ~val_x,
+     1, "x1",
+     2, "x2",
+     3, "x3"
+)
+y <- tribble(
+  ~key, ~val_y,
+     1, "y1",
+     2, "y2",
+     4, "y3"
+)
+x
+y
+```
+
+The simplest type of join is the inner join. An inner join matches pairs of observations whenever their keys are equal. They are often not used in analyses, b.c. it discards values that don't occur in each table, leading to many lost observations.
+```{r}
+x %>% 
+  inner_join(y, by = "key")
+#this gives us only 2 entries, b.c. there are only 2 keys that match both tables
+```
+
+##### outer joins
+
+An inner join keeps observations that appear in both tables. An outer join keeps observations that appear in at least one of the tables. There are three types of outer joins:
+
+* A left join keeps all observations in x, but not the obs that are just in y.
+* A right join keeps all observations in y, but not the obs that are only in x.
+* A full join keeps all observations that occur in either x or y.
+
+The most commonly used join is the left join: you use this whenever you look up additional data from another table, because it preserves the original observations even when there isn’t a match. This is assuming that you're adding data from another table (y) to augment your table of focus (x)
+
+The left join should be your default join: use it unless you have a strong reason to prefer one of the others.
+
+
+##### 13.4.4 Duplicate keys
+
+This is a bit of a hairy concept. So far, we've assumed that each key is unique, but sometimes they're not (I'm not really sure what a key is, then, since I thought it represented a unique identifier of an obs. Maybe the issue is that we're not assuming that these keys are primary?).
+
+Here are 2 ways that can happen:
+1. One table has duplicate keys. This is useful when you want to add in additional information as there is typically a one-to-many relationship.
+```{r}
+#here, key 1 and 2 are both duplicates, so val_y is brought in twice for each
+x <- tribble(
+  ~key, ~val_x,
+     1, "x1",
+     2, "x2",
+     2, "x3",
+     1, "x4"
+)
+y <- tribble(
+  ~key, ~val_y,
+     1, "y1",
+     2, "y2"
+)
+left_join(x, y, by = "key")
+```
+
+2. Both tables have duplicate keys. This is usually an error because in neither table do the keys uniquely identify an observation. When you join duplicated keys, you get all possible combinations, the Cartesian product:
+```{r}
+x <- tribble(
+  ~key, ~val_x,
+     1, "x1",
+     2, "x2",
+     2, "x3",
+     3, "x4"
+)
+y <- tribble(
+  ~key, ~val_y,
+     1, "y1",
+     2, "y2",
+     2, "y3",
+     3, "y4"
+)
+left_join(x, y, by = "key")
+```
+
+##### 13.4.5 Defining the key columns
+So far, the pairs of tables have always been joined by a single variable, and that variable has the same name in both tables. That constraint was encoded by by = "key". You can use other values for by to connect the tables in other ways:
+
+Natural joins
+The default, by = NULL, uses all variables that appear in both tables, the so called natural join. For example, the flights and weather tables match on their common variables: year, month, day, hour and origin.
+```{r}
+flights2 %>% 
+  left_join(weather)
+```
+
+Joins on character vectors
+
+A join can be performed based on a character vector, with by = "x". This is like a natural join, but uses only some of the common variables. For example, flights and planes have year variables, but they mean different things so we only want to join by tailnum.
+```{r}
+flights2 %>% 
+  left_join(planes, by = "tailnum")
+```
+
+Note that something funky happened with year, so it got turned into year.x & year.y. This is because they have the same name, but not the same values. R automatically adds a suffix in this case.
+
+
+Joins done on matching character vectors
+
+A join can also be done using character vectors present in both tables, but named different things in each table, using by = c("a" = "b"). This will match variable a in table x to variable b in table y. The variables from x will be used in the output.
+
+For example, if we want to draw a map we need to combine the flights data with the airports data which contains the location (lat and lon) of each airport. Each flight has an origin and destination airport, so we need to specify which one we want to join to:
+```{r}
+flights2 %>% 
+  left_join(airports, c("dest" = "faa")) %>% 
+  left_join(airports, c("origin" = "faa"))
+#here, the dest variable represents the faa name for the destination airport
+#doing this the first time produces a name column with the names of the destination
+#a second join adds the name of the origin airport, now under a new name column (name.y)
+#it seems like there should be a way to rename the new columns (see the suffix argument below)
+```
+
+##### 13.4.6 Exercises
+
+1. Compute the average delay by destination, then join on the airports data frame so you can show the spatial distribution of delays. Here’s an easy way to draw a map of the United States:
+
+```{r}
+avg_dest_delays <- 
+  flights |> 
+  group_by(dest) |> 
+  summarize(avg_delay = mean(arr_delay, na.rm = TRUE)) |> 
+  inner_join(airports, by = c(dest = "faa"))
+```
+
+This is a modified code based on the example they provide to plot airports on the US map:
+```{r}
+avg_dest_delays %>%
+  ggplot(aes(lon, lat, color = avg_delay)) +
+    borders("state") +
+    geom_point() +
+    coord_quickmap()
+```
+
+2. Add the location of the origin and destination (i.e. the lat and lon) to flights.
+```{r}
+#selecting a subset of airports makes things a bit cleaner
+airport_locations <- 
+  select(airports, faa, lat, lon)
+
+#selecting a subset of flights also makes things cleaner
+flights %>% 
+  select(year:day, hour, origin, dest) |> 
+  left_join(
+    airport_locations, 
+    by = c("origin" = "faa")
+    ) %>% 
+  left_join(
+    airport_locations, 
+    by = c("dest" = "faa"),
+    suffix = c("_origin", "_dest")
+    # existing lat and lon variables in tibble gain the _origin suffix
+    # new lat and lon variables are given _dest suffix
+    )
+```
+
+3. Is there a relationship between the age of a plane and its delays?
+
+To address this, we'll need a table that includes each individual plane's age (calculated from planes) merged with the flights data where we've grouped by tailnum and calculated the average delay.
+I'm doing this in pieces on my own to figure it out. The solution page code is below.
+```{r}
+#first, calculate delay
+plane_delay <- flights |> 
+  select(carrier, flight, tailnum, arr_delay) |> 
+  group_by(tailnum) |> 
+  summarize(avg_delay = mean(arr_delay, na.rm = TRUE))
+
+#now, merge the plane age 
+plane_age <- planes |> 
+  select(tailnum, year) |> 
+  mutate(age = 2013-year)
+
+#now, perform the join
+plane_delay |> 
+  left_join(
+    plane_age, 
+    by = 'tailnum') |> 
+  ggplot(aes(x = age, y = avg_delay)) +
+  geom_point()
+```
+Here's the solution page version:
+```{r}
+plane_cohorts <- inner_join(flights,
+  select(planes, tailnum, plane_year = year),
+  by = "tailnum"
+) %>%
+  mutate(age = year - plane_year) %>%
+  filter(!is.na(age)) %>%
+  mutate(age = if_else(age > 25, 25L, age)) %>%
+  group_by(age) %>%
+  summarise(
+    dep_delay_mean = mean(dep_delay, na.rm = TRUE),
+    dep_delay_sd = sd(dep_delay, na.rm = TRUE),
+    arr_delay_mean = mean(arr_delay, na.rm = TRUE),
+    arr_delay_sd = sd(arr_delay, na.rm = TRUE),
+    n_arr_delay = sum(!is.na(arr_delay)),
+    n_dep_delay = sum(!is.na(dep_delay))
+  )
+#> `summarise()` ungrouping output (override with `.groups` argument)
+```
+
+```{r}
+ggplot(plane_cohorts, aes(x = age, y = dep_delay_mean)) +
+  geom_point() +
+  scale_x_continuous("Age of plane (years)", breaks = seq(0, 30, by = 10)) +
+  scale_y_continuous("Mean Departure Delay (minutes)")
+```
+
+See the solutions page for other examples. I looked through them and they would take me time to work through, but they make sense.
+
+
+#### 13.5 Filtering joins
+
+semi-joins
+
+Filtering joins match observations in the same way as mutating joins, but affect the observations, not the variables. There are two types:
+
+* semi_join(x, y) keeps all observations in x that have a match in y.
+* anti_join(x, y) drops all observations in x that have a match in y.
+
+Semi-joins are useful for matching filtered summary tables back to the original rows. For example, imagine you’ve found the top ten most popular destinations:
+
+```{r}
+top_dest <- flights %>%
+  count(dest, sort = TRUE) %>%
+  head(10)
+top_dest
+```
+
+Now you want to find each flight that went to one of those destinations. You could construct a filter yourself, but it’s difficult to extend that approach to multiple variables.
+
+Instead you can use a semi-join, which connects the two tables like a mutating join, but instead of adding new columns, only keeps the rows in x that have a match in y:
+
+```{r}
+flights %>% 
+  semi_join(top_dest)
+```
+
+anti-joins
+
+The inverse of a semi-join is an anti-join. An anti-join keeps the rows that don’t have a match. Anti-joins are useful for diagnosing join mismatches. For example, when connecting flights and planes, you might be interested to know that there are many flights that don’t have a match in planes:
+```{r}
+flights %>%
+  anti_join(planes, by = "tailnum") %>%
+  count(tailnum, sort = TRUE)
+```
+
+##### 13.5.1 Exercises
+
+1. What does it mean for a flight to have a missing tailnum?
+```{r}
+#from sol'n:
+flights %>%
+  filter(is.na(tailnum))
+```
+
+It looks like these flights were all canceled.
+
+2. Filter flights to only show flights with planes that have flown at least 100 flights.
+
+The way I approached this was wrong, so I'm following the sol'n manual here.
+```{r}
+#sol'n page code
+planes_gte100 <- flights %>% #assign a new object (filename)
+  filter(!is.na(tailnum)) %>% # don't include any of the NAs
+  group_by(tailnum) %>% # group by tailnum
+  count() %>% # count the n's in each group
+  filter(n >= 100) # only keep the ones >= 100 obs
+```
+
+```{r}
+planes_100 <- flights |> 
+  filter(!is.na(tailnum)) |> 
+  group_by(tailnum) |> 
+  count() |> 
+  filter(n > 100)
+planes_100
+```
+
+Now, use semi_join to merge planes_100 to the flights df to only keep the flights that were flown by the top 100 planes.
+```{r}
+flights |> 
+  semi_join(planes_100, by = "tailnum") |> 
+  arrange(year, dest) #sorting for the hell of it
+```
+
+
+3. Combine fueleconomy::vehicles and fueleconomy::common to find only the records for the most common models.
+
+This requires a semi_join again, so we only keep models in both tables. The only tricky thing is the by = part.
+```{r}
+fueleconomy::vehicles |> 
+  semi_join(fueleconomy::common, by = c("make", "model"))
+```
+
+4. Find the 48 hours (over the course of the whole year) that have the worst delays. Cross-reference it with the weather data. Can you see any patterns?
+
+This is actually a poorly-framed question that I struggled through, so I'm using sol'n:
+```{r}
+worst_hours <- flights %>%
+  mutate(hour = sched_dep_time %/% 100) %>% # isolating the sched dep time to calc hour & match weather
+  group_by(origin, year, month, day, hour) %>% 
+  # grouping to determine average values for hour-long periods
+  summarise(dep_delay = mean(dep_delay, na.rm = TRUE)) %>% # calculating avg, excluding NAs
+  ungroup() %>% # ungrouping 
+  arrange(desc(dep_delay)) %>% # sorting largest to smallest
+  slice(1:48) # taking only the worst 48 (I used head(), but slice() is better)
+worst_hours
+```
+
+Now, pull in the weather data for most likely factors (precipitation, wind speed, and temp).
+```{r}
+weather_most_delayed <- semi_join(weather, worst_hours, 
+                                  by = c("origin", "year",
+                                         "month", "day", "hour"))
+```
+
+Finally, present the findings.
+```{r}
+ggplot(weather_most_delayed, aes(x = precip, y = wind_speed, color = temp)) +
+  geom_point()
+```
+
+5. What does anti_join(flights, airports, by = c("dest" = "faa")) tell you? What does anti_join(airports, flights, by = c("faa" = "dest")) tell you?
+
+The first one tells you flights that went to non-FAA designated airports. These are prolly foreign airports.
+```{r}
+anti_join(flights, airports, by = c("dest" = "faa")) %>% 
+  distinct(dest)
+```
+
+The second one returns the US airports that were not the destination of any flight in the data.
+```{r}
+anti_join(airports, flights, by = c("faa" = "dest"))
+```
+
+6. You might expect that there’s an implicit relationship between plane and airline, because each plane is flown by a single airline. Confirm or reject this hypothesis using the tools you’ve learned above.
+
+First, find all distinct airline, plane combinations.
+```{r}
+planes_carriers <- flights |> 
+  filter(!is.na(tailnum)) %>%
+  distinct(tailnum, carrier)
+planes_carriers
+```
+
+The number of planes that have flown for more than one airline are those tailnum that appear more than once in the planes_carriers data.
+```{r}
+planes_carriers %>%
+  count(tailnum) %>%
+  filter(n > 1) %>%
+  nrow()
+```
+
+```{r}
+carrier_transfer_tbl <- planes_carriers %>%
+  # keep only planes which have flown for more than one airline
+  group_by(tailnum) %>%
+  filter(n() > 1) %>%
+  # join with airlines to get airline names
+  left_join(airlines, by = "carrier") %>%
+  arrange(tailnum, carrier)
+carrier_transfer_tbl
+```
+
+That was a hard one, but this approach made sense.
+
+
+#### 13.6 Join problems
+
+Most data sets in the wild will have problems. Here are some strategies for dealing with the most common issues:
+1. Use your understanding of the data to find the primary keys (don't rely on what's unique).
+2. Check that none of the variables of the primary key are missing. Make sure to use the count() |> filter(n > 1) trick to verify. This is necessary but not sufficient, though (see below).
+3. Check that your foreign keys match primary keys in another table. The best way to do this is with an anti_join(). It’s common for keys not to match because of data entry errors. Fixing these is often a lot of work. If you do have missing keys, you’ll need to be thoughtful about your use of inner vs. outer joins, carefully considering whether or not you want to drop rows that don’t have a match.
+
+#### 13.7 Set operations
+
+These aren't often used, but they can be helpful when you want to break a single complex filter into simpler pieces. Each of them go row by row, comparing the values of every variable (so they're much slower). 
+
+* intersect(x, y): return only observations in both x and y.
+* union(x, y): return unique observations in x and y.
+* setdiff(x, y): return observations in x, but not in y.
+
+For example, with the following data...
+```{r}
+df1 <- tribble(
+  ~x, ~y,
+   1,  1,
+   2,  1
+)
+df2 <- tribble(
+  ~x, ~y,
+   1,  1,
+   1,  2
+)
+```
+
+Here are the four options:
+```{r}
+intersect(df1, df2)
+union(df1, df2)
+setdiff(d1, d2)
+setdiff(d2, d1)
+```
+
+
+# ----*Chapter 14 - Strings*-----
+
+#### string basics
+There is a web page that can help you see how your regex codes will actually work: https://regexr.com/
+
+creating strings:
+```{r}
+string1 <- "This is a string"
+string2 <- 'If I want to include a "quote" inside a string, I use single quotes'
+#this doesn't work out as expected
+```
+
+To include a literal quote or double quote in a string, escape it with the \ first.
+```{r}
+double_quote <- "\"" # or '"' NOTE: this doesn't come out like expected
+single_quote <- '\'' # or "'"
+practice_quote <- "He said, 'bullshit!'"
+
+double_quote
+single_quote
+practice_quote
+string2
+```
+
+The following two are supposed to produce the same output (see the note below for why neither work right)
+```{r}
+ver_1 <- '"It\'s alive!", he screamed.'
+ver_2 <- "\"It's alive!\", he screamed."
+
+ver_1
+ver_2
+```
+
+But this does work as desired:
+```{r}
+ver_3 <- "'It's alive!', he screamed."
+# '"It's alive!", he screamed.' does NOT work
+ver_3
+```
+
+##### printed quotes != the string
+Here's the resolution: the printed representation of a string is not the same as string itself, because the printed representation shows the escapes. To see the raw contents of the string, use writeLines():
+
+```{r}
+writeLines(ver_1)
+writeLines(ver_2)
+writeLines(ver_3)
+writeLines(practice_quote)
+writeLines(string2)
+```
+
+There are a handful of other special characters. The most common are "\n", newline, and "\t", tab, but you can see the complete list by requesting help on ": ?'"', or ?"'". You’ll also sometimes see strings like "\u00b5", this is a way of writing non-English characters that works on all platforms:
+```{r}
+x <- "\u00b5"
+x
+```
+
+##### 14.2.1 String length
+
+While base R has a lot of functions for working with strings, they are more difficult to work w/ b.c. they're inconsistently formatted. Instead, use the package stringr, which is part of the tidyverse package. All of stringr's functions start with str_. For example, str_length() gives the number of characters in a string (including spaces, quote marks, etc.). Use the autocomplete feature of Rstudio to explore different possible functions.
+```{r}
+practice_quote
+str_length(practice_quote)
+```
+
+##### 14.2.2 combining strings
+
+Combining 2 strings is done with str_c().
+```{r}
+str_c("x", "y")
+#> [1] "xy"
+str_c("x", "y", "z")
+#> [1] "xyz"
+```
+
+You can insert seperators using the sep = argument:
+```{r}
+str_c("x", "y", sep = "&")
+# example
+str_c("x", "y", sep = " & ")
+#> spaces count as characters
+str_c("x", "y", "z", sep = ", and ")
+#> can also use other text
+```
+
+Like most other functions in R, missing values are contagious. If you want them to print as "NA", use str_replace_na():
+```{r}
+x <- c("abc", NA)
+x
+str_c("|-", x, "-|")
+#> [1] "|-abc-|" NA
+str_replace_na(x)
+str_c("|-", str_replace_na(x), "-|")
+#> [1] "|-abc-|" "|-NA-|"
+```
+
+str_c() is vectorised, and it automatically recycles shorter vectors to the same length as the longest
+```{r}
+str_c("prefix-", c("a", "b", "c"), "-suffix")
+```
+
+Can we add two string vectors?
+```{r}
+y <- str_c("a12", "b", "c")
+z <- str_c("x", "y", "z")
+y
+str_c(y, z)
+```
+
+Objects of length 0 are silently dropped. This is particularly useful in conjunction with if:
+```{r}
+name <- "Pete"
+time_of_day <- "morning"
+birthday <- FALSE #see the diff when changed to FALSE
+
+str_c(
+  "Good ", time_of_day, " ", name,
+  if (birthday) " and HAPPY BIRTHDAY",
+  "."
+  )
+```
+
+To collapse a vector of strings into a single string, use collapse. This is odd, since I see no difference between the normal str_c and using the collapse option, except that collapse adds a spacer. See the diff between paste() and str_c() in Exercise 1.
+```{r}
+str_c(c("x12", "y", "z"), collapse = ", ")
+```
+
+##### 14.2.3 subsetting / extracting from strings
+
+You can extract parts of a string using str_sub(). As well as the string, str_sub() takes start and end arguments which give the (inclusive) position of the substring. NOTE that indexing starts at 1.
+```{r}
+x <- c("Apple", "Banana", "Pear")
+str_sub(x, 1, 3)
+#> [1] "App" "Ban" "Pea"
+# negative numbers count backwards from end
+str_sub(x, -3, -1)
+#> [1] "ple" "ana" "ear"
+```
+
+You can also use the assignment form of str_sub() to modify strings:
+```{r}
+x1 <- c("HoUsE", "BotTLe", "PILLOW")
+str_sub(x1, 1, 1) <- str_to_lower(str_sub(x1, 1, 1)) #this just changes the indexed value
+x1
+
+str_to_lower(x1) #why is the str_sub function even needed?
+```
+
+##### 14.2.5 Exercises
+
+1. In code that doesn’t use stringr, you’ll often see paste() and paste0(). What’s the difference between the two functions? What stringr function are they equivalent to? How do the functions differ in their handling of NA?
+
+base::paste() concatenates vectors after converting to a character. paste0() is similar, but doesn't add a space that paste() does. They are similar to str_c().
+
+However, str_c() and the paste function handle NA differently. The function str_c() propagates NA, if any argument is a missing value, it returns a missing value. This is in line with how the numeric R functions, e.g. sum(), mean(), handle missing values. However, the paste functions, convert NA to the string "NA" and then treat it as any other character vector.
+```{r}
+paste0(1:12)
+(nth <- paste0(1:12, c("st", "nd", "rd", rep("th", 9))))
+(n_th <- paste(1:12, c("st", "nd", "rd", rep("th", 9))))
+paste0(nth, collapse = ", ")
+```
+
+2. In your own words, describe the difference between the sep and collapse arguments to str_c().
+
+collapse() inserts a separator and then combines the whole vector into a single string, while sep() inserts a separator, but keeps the vector intact. 
+```{r}
+paste0(nth, collapse = ", ")
+paste0(nth, sep = " , ")
+```
+
+3. Use str_length() and str_sub() to extract the middle character from a string. What will you do if the string has an even number of characters?
+
+```{r}
+scale <- "she said to him, 'every good boy does fine'"
+len_scale <- str_length(scale)
+half_scale <- ceiling(len_scale / 2) #this is a nice option to generalize the formula
+len_scale
+str_sub(scale, half_scale, half_scale)
+```
+
+4. What does str_wrap() do? When might you want to use it?
+
+It wraps strings into nicely formatted paragraphs (somehow). You'd use it to typeset a long string.
+
+5. What does str_trim() do? What’s the opposite of str_trim()?
+
+It trims whitespace from a string. The opposite is str_pad(), which keeps column width constant among items in a vector of strings.
+```{r}
+str_trim("  String with trailing and leading white space\t")
+str_trim("\n\nString with trailing and leading white space\n\n")
+
+str_pad(c("a", "abc", "abcdef"), 10)
+str_trim(str_pad(c("a", "abc", "abcdef"), 10))
+```
+
+
+#### 14.3 Matching patterns with regular expressions
+
+Regular expressions (regex, regexp) allow you to match particular values in a string vector. They're hard at first, but will be very useful, so just fucking learn them already.
+
+To learn regular expressions, we’ll use str_view() and str_view_all(). These functions take a character vector and a regular expression, and show you how they match. 
+
+##### 14.3.1 basic regex matches
+
+* exact strings
+```{r}
+x <- c("apple", "banana", "pear")
+str_view(x, "an")
+
+```
+
+NOTE: a useful source of info for changing theme appearance in RStudio, including changing default colors: https://stackoverflow.com/questions/60862780/changing-invisible-white-font-output-in-rstudio-theme-cobalt
+
+The next step up in complexity is ., which matches any character (except a newline):
+```{r}
+str_view(x, ".a.")
+```
+
+But if “.” matches any character, how do you match the character “.”? You need to use a combination of \:
+```{r}
+# To create the regular expression, we need \\
+dot <- "\\."
+
+# But the expression itself only contains one:
+writeLines(dot)
+#> \.
+
+# And this tells R to look for an explicit .
+str_view(c("abc", "a.c", "bef"), "a\\.c")
+```
+
+If \ is used as an escape character in regular expressions, how do you match a literal \? Well you need to escape it, creating the regular expression \\. To create that regular expression, you need to use a string, which also needs to escape \. That means to match a literal \ you need to write "\\\\" — you need four backslashes to match one!
+```{r}
+x <- "a\\b" #here, the first \ is to escape the desired \ char
+writeLines(x)
+#> a\b
+
+str_view(x, "\\\\")
+```
+
+##### 14.3.2 Anchors
+
+By default, regular expressions will match any part of a string. It’s often useful to anchor the regular expression so that it matches from the start or end of the string. You can use:
+
+^ to match the start of the string.
+$ to match the end of the string.
+
+To remember which is which, try this mnemonic which I learned from Evan Misshula: if you begin with power (^), you end up with money ($).
+```{r}
+x <- c("apple", "banana", "pear")
+str_view(x, "^a") #finds the a that is only at the beginning
+str_view(x, "a$") #finds the a that is only @ the end
+```
+
+To force a regular expression to only match a complete string, anchor it with both ^ and $:
+```{r}
+x <- c("apple pie", "apple", "apple cake")
+str_view(x, "apple")
+str_view(x, "^apple$")
+```
+
+You can enter other characters like spaces to help you id certain characters as well.
+```{r}
+str_view(x, " p") #note the space before the desired "p"
+```
+
+##### exercises (only a few)
+
+2. Given the corpus of common words in stringr::words, create regular expressions that find all words that:
+
+2.1 start with "y"
+```{r}
+str_view(stringr::words, "^y", match = TRUE)
+```
+
+2.2 end with "x"
+```{r}
+str_view(stringr::words, "x$", match = TRUE)
+```
+
+2.3 are exactlly 3 letters long (used sol'n page here)
+```{r}
+str_view(stringr::words, pattern = "^...$", match = TRUE)
+```
+
+Here's a related function that counts the number of occurrences in each object in a vector:
+```{r}
+fruit <- c("apple", "banana", "pear", "pineapple")
+str_count(fruit, "a")
+str_count(fruit, "p")
+str_count(fruit, "e")
+str_count(fruit, c("a", "b", "p", "p"))
+```
+
+Applying this to the count of 3 letter words:
+```{r}
+#can I count how many matches there are in the corpus?
+sum(str_count(stringr::words, pattern = "^...$")) 
+#' I did this on my own, motherfucker!
+#' Since str_count records the number of TRUE values in each object of a vector, use sum to count the number of matches in the corpus.
+```
+
+
+2.4 have >= 7 letters (again, from sol'n)
+```{r}
+str_view(stringr::words, ".......", match = TRUE)
+sum(str_count(stringr::words, pattern = "......."))
+```
+
+##### 14.3.3 Character classes and alternatives
+
+There are a number of special patterns that match more than one character. You’ve already seen ., which matches any character apart from a newline. There are four other useful tools:
+
+* \d: matches any digit.
+* \s: matches any whitespace (e.g. space, tab, newline).
+* [abc]: matches a, b, or c.
+* [^abc]: matches anything except a, b, or c.
+Remember, to create a regular expression containing \d or \s, you’ll need to escape the \ for the string, so you’ll type "\\d" or "\\s".
+
+```{r}
+# Look for a literal character that normally has special meaning in a regex
+play <- c("abc", "a.c", "a*c", "a c")
+str_view(play, "a[.]c")
+```
+
+```{r}
+#look for anything that has an asterisk followed by a c
+str_view(play, pattern = ".[*]c") #slightly diff from ".[*]" alone
+```
+
+```{r}
+#look for anything with an a followed by a space
+str_view(play, pattern = "a[ ]")
+#note that this is different from [], which doesn't run
+str_view(play, pattern = "a[\\s]")
+#here, the first \ is needed to escape the second \, which is part of the \s combo
+```
+
+This is because a few characters have special meaning even inside a character class and must be handled with backslash escapes: ] \ ^ and -.
+
+You can use the bar char to find alternatives of characters, but this is most effective in combination with parentheses to specify what you want.
+```{r}
+str_view(c("grey", "gray"), "gr(e|a)y")
+```
+
+##### 14.3.3.1 Exercises
+
+1. Create regular expressions to find all words that:
+1.1 start w/ a vowel
+```{r}
+str_view(stringr::words, pattern = "^(a|e|i|o|u)")
+#this also works: str_subset(stringr::words, "^[aeiou]")
+sum(str_count(stringr::words, pattern = "^(a|e|i|o|u)"))
+```
+
+1.2 That only contain consonants. (Hint: thinking about matching “not”-vowels.)
+```{r}
+str_view(stringr::words, "[aeiou]", match=FALSE)
+```
+
+1.3 End with ed, but not with eed.
+```{r}
+#from sol'n:
+str_subset(stringr::words, "[^e]ed$")
+```
+
+1.4 Words ending in ing or ise:
+```{r}
+#both of these options work, and in this case they're equal. The first is more precise and generalizeable 
+str_subset(stringr::words, pattern = "i(se|ng)")
+str_subset(stringr::words, pattern = "(ing|ise)")
+```
+
+2. Empirically verify the rule “i before e except after c”.
+
+```{r}
+#I'll just copy the sol'n here
+length(str_subset(stringr::words, "(cei|[^c]ie)")) 
+# gives count of e after c, but not i after c
+length(str_subset(stringr::words, "(cie|[^c]ei)"))
+# gives count of ie only after c
+str_subset(stringr::words, "(cie|[^c]ei)")
+#these are the "cie" words that violate the rule "or when sounds like a, as in neighbor and weigh (science & society are exceptions to the exceptions)
+str_subset(stringr::words, pattern = "(cei|[^c]ie)")
+#this gives the words that are all i before e (in the corpus)
+```
+
+3. Is “q” always followed by a “u” in the corpus?
+```{r}
+str_subset(stringr::words, pattern = "q[^u]")
+#this correctly reports that there are 0 words where q isn't followed by u in this corpus. More generally, there are a few rare words that don't follow "qu"
+```
+
+5 (skipped 4). Create a regular expression that will match telephone numbers as commonly written in your country.
+
+In the US, the format could be 123-456-7890
+```{r}
+#given these options, which matches the format?
+phone <- c("123-456-7890", "(123)456-7890", "(123) 456-7890", "1235-2351")
+#this will match only this format
+str_view(phone, "\\d\\d\\d-\\d\\d\\d-\\d\\d\\d\\d")
+```
+
+```{r}
+#this will match the second format (space or not)
+str_view(phone, "\\(\\d\\d\\d\\)\\s*\\d\\d\\d-\\d\\d\\d\\d")
+#there are options in the next section that can simplify these
+```
+
+
+#### 14.3.4 Repetition
+The next step up in power involves controlling how many times a pattern matches:
+?: 0 or 1
++: 1 or more
+*: 0 or more
+
+```{r}
+x <- "1888 is the longest yeer in Roman numerals: MDCCCLXXXVIII"
+str_view(x, "CC?")
+#this asks if the particular sequence occurs 0 or 1 times
+```
+
+```{r}
+str_view(x, "CC+")
+#this asks if it occurs 1 or more times
+```
+
+```{r}
+str_view(x, "ee")
+```
+
+You can also specify the number of matches precisely:
+
+{n}: exactly n
+{n,}: n or more
+{,m}: at most m
+{n,m}: between n and m
+
+```{r}
+str_view(x, "C{2}")
+```
+
+Some examples from the solutions that will be useful in the future:
+
+This regex finds all words starting with three consonants.
+```{r}
+str_view(words, "^[^aeiou]{3}", match = TRUE)
+```
+
+This regex finds three or more vowels in a row:
+```{r}
+str_view(words, "[aeiou]{3,}", match = TRUE)
+```
+
+This regex finds two or more vowel-consonant pairs in a row.
+```{r}
+str_view(words, "([aeiou][^aeiou]){2,}", match = TRUE)
+```
+
+##### 14.3.5 Grouping and backreferences
+
+<skipped>
+
+#### 14.4 Tools: applying regex / stringr functions
+
+##### 14.4.1 Detect matches
+
+str_detect() determines if there is a match to a pattern in each string of a vector
+```{r}
+x <- c("apple", "banana", "pear")
+str_detect(x, "e")
+```
+
+Given that TRUE = 1 and FALSE = 0, you can combine str_detect() to quantify the matches:
+```{r}
+# How many common words start with t?
+sum(str_detect(words, "^t"))
+#> [1] 65
+# What proportion of common words end with a vowel?
+mean(str_detect(words, "[aeiou]$"))
+#> [1] 0.2765306
+```
+
+it’s often easier to combine multiple str_detect() calls with logical operators, rather than trying to create a single regular expression. For example, here are two ways to find all words that don’t contain any vowels:
+```{r}
+# Find all words containing at least one vowel, and negate (WAY EASIER)
+no_vowels_1 <- !str_detect(words, "[aeiou]")
+# Find all words consisting only of consonants (non-vowels)
+no_vowels_2 <- str_detect(words, "^[^aeiou]+$")
+identical(no_vowels_1, no_vowels_2)
+#> [1] TRUE
+```
+
+Typically, strings will be one column of a data frame, and you’ll want to use filter to locate matches.
+```{r}
+df <- tibble(
+  word = words, 
+  i = seq_along(word) #this tells you where in the list the words occur
+)
+df %>% 
+  filter(str_detect(word, "x$"))
+```
+
+A variation on str_detect() is str_count(): rather than a simple yes or no, it tells you how many matches there are in a string.
+```{r}
+x <- c("apple", "banana", "pear")
+str_count(x, "a")
+#> [1] 1 3 1
+
+# On average, how many vowels per word?
+mean(str_count(words, "[aeiou]"))
+#> [1] 1.991837
+```
+
+It’s natural to use str_count() with mutate():
+```{r}
+#makes 2 new columns that add up the number of vowels & consonants in each word
+df %>% 
+  mutate(
+    vowels = str_count(word, "[aeiou]"),
+    consonants = str_count(word, "[^aeiou]")
+  )
+```
+
+Note that matches never overlap. For example, in "abababa", how many times will the pattern "aba" match? Regular expressions say two, not three (this threw me off earlier):
+
+Note the use of str_view_all(). As you’ll shortly learn, many stringr functions come in pairs: one function works with a single match, and the other works with all matches. The second function will have the suffix _all.
+```{r}
+str_count("abababa", "aba")
+#> [1] 2
+str_view_all("abababa", "aba")
+```
+
+<skipping exercises>
+
+##### 14.4.2 Extract matches
+
+To extract the actual text of a match, use str_extract(). For examples, we'll need to load stringr::sentences:
+```{r}
+length(sentences)
+head(sentences)
+```
+
+Imagine we want to find all sentences that contain a colour. We first create a vector of colour names, and then turn it into a single regular expression:
+```{r}
+colours <- c("red", "orange", "yellow", "green", "blue", "purple")
+colour_match <- str_c(colours, collapse = "|")
+#need the bar to serve as "or" for next step
+colour_match
+```
+
+Now we can select the sentences that contain a colour, and then extract the colour to figure out which one it is:
+```{r}
+has_colour <- str_subset(sentences, colour_match)
+matches <- str_extract(has_colour, colour_match)
+head(has_colour)
+head(matches)
+```
+
+Note that str_extract() only extracts the first match. We can see that most easily by first selecting all the sentences that have more than 1 match:
+```{r}
+more <- sentences[str_count(sentences, colour_match) > 1]
+str_view_all(more, colour_match)
+```
+
+This is a common pattern for stringr functions, because working with a single match allows you to use much simpler data structures. To get all matches, use str_extract_all(). It returns a list:
+```{r}
+str_extract_all(more, pattern = colour_match)
+```
+##### 14.4.3 Grouped matches
+
+You can also use parentheses to extract parts of a complex match. For example, imagine we want to extract nouns from the sentences. As a heuristic, we’ll look for any word that comes after “a” or “the”. Defining a “word” in a regular expression is a little tricky, so here I use a simple approximation: a sequence of at least one character that isn’t a space.
+
+```{r}
+noun <- "(a|the) ([^ ]+)" # I think this selects for occurences with not more than 1 space after a or the.
+
+has_noun <- sentences %>%
+  str_subset(noun) %>%
+  head(10)
+has_noun %>% 
+  str_extract(noun)
+```
+
+
+Examples
+Skipped some examples, but this one looked interesting:
+Find all contractions. Separate out the pieces before and after the apostrophe.
+
+```{r}
+contraction <- "([A-Za-z]+)'([A-Za-z]+)"
+sentences[str_detect(sentences, contraction)] %>%
+  str_extract(contraction) %>%
+  str_split("'")
+#note that this solution doesn't specify contractions, but also includes posessives 
+```
+
+
+##### 14.4.4 Replacing matches (str_replace)
+
+str_replace() and str_replace_all() allow you to replace matches with new strings. The simplest use is to replace a pattern with a fixed string:
+```{r}
+x <- c("apple", "pear", "banana")
+str_replace(x, "[aeiou]", "-") #note that this just does 1st occurrence per string
+#> [1] "-pple"  "p-ar"   "b-nana"
+str_replace_all(x, "[aeiou]", "-")
+#> [1] "-ppl-"  "p--r"   "b-n-n-"
+```
+
+With str_replace_all() you can perform multiple replacements by supplying a named vector (I've used this a lot in recoding variables or names)
+```{r}
+x <- c("1 house", "2 cars", "3 people")
+str_replace_all(x, c("1" = "one", "2" = "two", "3" = "three"))
+```
+
+##### 14.4.5 Splitting w/ str_split()
+
+Use str_split() to split a string up into pieces. For example, we could split sentences into words (also very useful). This generates a list.
+```{r}
+sentences %>%
+  head(5) %>% 
+  str_split(" ")
+```
+
+like the other stringr functions that return a list, you can use simplify = TRUE to return a matrix:
+```{r}
+sentences %>%
+  head(5) %>% 
+  str_split(" ", simplify = TRUE)
+```
+
+Instead of splitting up strings by patterns, you can also split up by character, line, sentence and word boundary()s:
+```{r}
+x <- "This is a sentence.  This is another sentence."
+str_view_all(x, boundary("word"))
+```
+
+##### other noteworthy options
+
+comments = TRUE allows you to use comments and white space to make complex regular expressions more understandable. Spaces are ignored, as is everything after #. To match a literal space, you’ll need to escape it: "\\ ".
+```{r}
+
+phone <- regex("
+  \\(?     # optional opening parens
+  (\\d{3}) # area code
+  [) -]?   # optional closing parens, space, or dash
+  (\\d{3}) # another three numbers
+  [ -]?    # optional space or dash
+  (\\d{3}) # three more numbers
+  ", comments = TRUE)
+
+str_match("514-791-8141", phone)
+```
+
+
+# ----*Chapter 15 - Factors*-----
+
+In R, factors are used to work with categorical variables, variables that have a fixed and known set of possible values. They are also useful when you want to display character vectors in a non-alphabetical order.
+
+To work with factors, we’ll use the forcats package, which is part of the core tidyverse. It provides tools for dealing with categorical variables (and it’s an anagram of factors!) using a wide range of helpers for working with factors.
+
+Factors solve a variety of problems, though they can raise some as well. One problem they solve is that regular strings can be prone to and allow typos (Jam instead of Jan). Another issue is that R automatically orders strings alphabetically, but factors allow you to control the order.
+
+For this example, they give us a variable that lists some months, as well as another variable with some mistakes.
+```{r}
+x1 <- c("Dec", "Apr", "Jan", "Mar")
+x2 <- c("Dec", "Apr", "Jam", "Marc")
+```
+
+The first step on working with factors is to create the ordered set of levels of the factor:
+```{r}
+month_levels <- c(
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+)
+```
+
+Second, make the factor:
+```{r}
+y1 <- factor(x1, levels = month_levels)
+y1
+
+sort(y1)
+```
+
+Any values not in the factor list will now be replaced with NA:
+```{r}
+y2 <- factor(x2, levels = month_levels)
+y2
+```
+
+If you omit the levels, they’ll be taken from the data in alphabetical order:
+```{r}
+factor(x1)
+```
+
+#### 15.3 General Social Survey
+
+This is an interesting dataset to work with, possibly for the CRS project. 
+```{r}
+#this shows a small subset of the data. To see more, check out the link: https://gss.norc.org/.
+gss_cat
+```
+
+To see the levels of a factor, use count()...
+```{r}
+gss_cat %>%
+  count(relig)
+```
+
+...coupled with a chart
+```{r}
+ggplot(gss_cat, aes(relig)) +
+  geom_bar() + 
+  coord_flip()
+```
+
+##### 15.3.1 Exercises
+
+1. Explore the distribution of rincome (reported income). What makes the default bar chart hard to understand? How could you improve the plot?
+
+```{r}
+ggplot(gss_cat, aes(rincome)) +
+  geom_bar() +
+  coord_flip()
+```
+
+2. What is the most common relig in this survey? What’s the most common partyid?
+```{r}
+gss_cat |> 
+  group_by(relig) |> 
+  count()
+
+gss_cat |> 
+  group_by(partyid) |> 
+  count()
+```
+
+What I've done is to print a complete summary. One could also make a figure (as above). To more explicitly answer the question, sol'n did, e.g.:
+```{r}
+gss_cat %>%
+  count(relig) %>%
+  arrange(desc(n)) %>%
+  head(1)
+```
+
+3. Which relig does denom (denomination) apply to? How can you find out with a table? How can you find out with a visualisation?
+```{r}
+levels(gss_cat$denom)
+```
+
+Using filter() to remove Not applicable, No answer, etc. and see what's left.
+```{r}
+gss_cat %>%
+  filter(!denom %in% c(
+    "No answer", "Other", "Don't know", "Not applicable",
+    "No denomination"
+  )) %>%
+  count(relig)
+```
+
+Sol'n had a nice figure to address 2nd part:
+```{r}
+gss_cat %>%
+  count(relig, denom) %>%
+  ggplot(aes(x = relig, y = denom, size = n)) +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+#### 15.4 Modifying factor order
+
+Reporting results of analyses of factors is by default alphabetical. For example, plotting many figures is illogical when using the defaults.
+```{r}
+relig_summary <- gss_cat %>%
+  group_by(relig) %>%
+  summarise(
+    age = mean(age, na.rm = TRUE),
+    tvhours = mean(tvhours, na.rm = TRUE),
+    n = n()
+  )
+#> `summarise()` ungrouping output (override with `.groups` argument)
+
+ggplot(relig_summary, aes(tvhours, relig)) + geom_point()
+```
+
+We can improve it by reordering the levels of relig using fct_reorder(). fct_reorder() takes three arguments:
+
+1. f, the factor whose levels you want to modify.
+2. x, a numeric vector that you want to use to reorder the levels.
+3. Optionally, fun, a function that’s used if there are multiple values of x for each value of f. The default value is median.
+
+```{r}
+ggplot(relig_summary, aes(tvhours, fct_reorder(relig, tvhours))) +
+  geom_point()
+```
+
+While this can be done in a ggplot call, more complicated reordering should be done with a mutate() step:
+```{r}
+relig_summary %>%
+  mutate(relig = fct_reorder(relig, tvhours)) %>%
+  ggplot(aes(tvhours, relig)) +
+    geom_point()
+```
+
+If there are categories that already have a logical order (like income), then it shouldn't be reordered. However, it sometimes makes sense to pull out exceptional, unordered values (like “Not applicable”) to the front with the other special levels. You can use fct_relevel(). It takes a factor, f, and then any number of levels that you want to move to the front of the line.
+
+```{r}
+# first prepare the summary
+rincome_summary <- gss_cat %>%
+  group_by(rincome) %>%
+  summarise(
+    age = mean(age, na.rm = TRUE),
+    tvhours = mean(tvhours, na.rm = TRUE),
+    n = n()
+  )
+#then the plot
+ggplot(rincome_summary, aes(age, fct_relevel(rincome, c("Not applicable", "Refused")))) +
+  geom_point()
+```
+
+Another type of reordering is useful when you are colouring the lines on a plot. fct_reorder2() reorders the factor by the y values associated with the largest x values. This makes the plot easier to read because the line colours line up with the legend.
+```{r}
+by_age <- gss_cat %>%
+  filter(!is.na(age)) %>%
+  count(age, marital) %>%
+  group_by(age) %>%
+  mutate(prop = n / sum(n))
+
+#make the plot w/ default order - note how legend order is diff from magnitude of lines
+ggplot(by_age, aes(age, prop, colour = marital)) +
+  geom_line(na.rm = TRUE)
+#now make plot takign control of legend order
+ggplot(by_age, aes(age, prop, colour = fct_reorder2(marital, age, prop))) +
+  geom_line() +
+  labs(colour = "marital")
+```
+
+Finally, for bar plots, you can use fct_infreq() to order levels in increasing frequency: this is the simplest type of reordering because it doesn’t need any extra variables. You may want to combine with fct_rev(), which puts things in order of smallest to largest.
+```{r}
+gss_cat %>%
+  mutate(marital = marital %>% fct_infreq() %>% fct_rev()) %>%
+  ggplot(aes(marital)) +
+    geom_bar()
+```
+
+##### 15.4.1 Exercises
+1. There are some suspiciously high numbers in tvhours. Is the mean a good summary?
+
+```{r}
+summary(gss_cat$"tvhours")
+# same as summary(gss_cat[["tvhours"]])
+```
+
+```{r}
+gss_cat |> 
+  filter(!is.na(tvhours)) |> 
+  ggplot(aes(x = tvhours)) + geom_histogram(binwidth = 1)
+```
+
+2. For each factor in gss_cat identify whether the order of the levels is arbitrary or principled.
+
+here's the approach for 1 factor of interest
+```{r}
+gss_cat |> 
+  summary()
+
+levels(gss_cat$marital)
+```
+
+```{r}
+gss_cat |> 
+  group_by(marital) |> 
+  ggplot(aes(x = marital)) +
+  geom_bar()
+```
+
+3. Why did moving “Not applicable” to the front of the levels move it to the bottom of the plot?
+Doing this gives the level “Not applicable” an integer value of 1.
+
+
+#### 15.5 Modifying factor levels
+
+More powerful than changing the orders of the levels is changing their values. This allows you to clarify labels for publication, and collapse levels for high-level displays. The most general and powerful tool is fct_recode(). It allows you to recode, or change, the value of each level. For example, take the gss_cat$partyid:
+```{r}
+gss_cat %>% count(partyid)
+```
+
+The levels are terse and inconsistent. Let’s tweak them to be longer and use a parallel construction. fct_recode() will leave levels that aren’t explicitly mentioned as is, and will warn you if you accidentally refer to a level that doesn’t exist. It also (obvi) puts the others in the order you specify.
+```{r}
+gss_cat %>%
+  mutate(partyid = fct_recode(partyid,
+    "Republican, strong"    = "Strong republican",
+    "Republican, weak"      = "Not str republican",
+    "Independent, near rep" = "Ind,near rep",
+    "Independent, near dem" = "Ind,near dem",
+    "Democrat, weak"        = "Not str democrat",
+    "Democrat, strong"      = "Strong democrat"
+  )) %>%
+  count(partyid)
+```
+
+To combine groups, you can assign multiple old levels to the same new level (for example, all the "Other" below)
+```{r}
+gss_cat %>%
+  mutate(partyid = fct_recode(partyid,
+    "Republican, strong"    = "Strong republican",
+    "Republican, weak"      = "Not str republican",
+    "Independent, near rep" = "Ind,near rep",
+    "Independent, near dem" = "Ind,near dem",
+    "Democrat, weak"        = "Not str democrat",
+    "Democrat, strong"      = "Strong democrat",
+    "Other"                 = "No answer",
+    "Other"                 = "Don't know",
+    "Other"                 = "Other party"
+  )) %>%
+  count(partyid)
+```
+
+If you want to collapse a lot of levels, fct_collapse() is a useful variant of fct_recode(). For each new variable, you can provide a vector of old levels:
+```{r}
+gss_cat %>%
+  mutate(partyid = fct_collapse(partyid,
+    other = c("No answer", "Don't know", "Other party"),
+    rep = c("Strong republican", "Not str republican"),
+    ind = c("Ind,near rep", "Independent", "Ind,near dem"),
+    dem = c("Not str democrat", "Strong democrat")
+  )) %>%
+  count(partyid)
+```
+
+Sometimes you just want to lump together all the small groups to make a plot or table simpler. That’s the job of fct_lump(). It can be quite aggressive in the default setting. The default behaviour is to progressively lump together the smallest groups, ensuring that the aggregate is still the smallest group. 
+```{r}
+gss_cat |> 
+  mutate(relig = fct_lump(relig)) |> 
+  count(relig)
+```
+
+However, you can control the settings on the number of groups with the n parameter:
+```{r}
+gss_cat %>%
+  mutate(relig = fct_lump(relig, n = 10)) %>%
+  count(relig, sort = TRUE) 
+```
+
+##### 15.5.1 Exercises
+
+1. How have the proportions of people identifying as Democrat, Republican, and Independent changed over time?
+
+To answer that, we need to combine the multiple levels into Democrat, Republican, and Independent
+```{r}
+#first, what are the levels?
+levels(gss_cat$partyid)
+```
+
+```{r}
+#now, combine into just 3 categories
+gss_cat %>%
+  mutate(
+    partyid =
+      fct_collapse(partyid,
+        other = c("No answer", "Don't know", "Other party"),
+        rep = c("Strong republican", "Not str republican"),
+        ind = c("Ind,near rep", "Independent", "Ind,near dem"),
+        dem = c("Not str democrat", "Strong democrat")
+      )
+  ) %>% # then, prep data for plotting
+  count(year, partyid) %>%
+  group_by(year) %>%
+  mutate(prop = n / sum(n)) %>% #then plot
+  ggplot(aes(
+    x = year, y = prop,
+    colour = fct_reorder2(partyid, year, prop)
+  )) +
+  geom_point() +
+  geom_line() +
+  labs(colour = "Party ID.")
+```
+
+2. How could you collapse rincome into a small set of categories? Using fct_lump() isn't good here b.c. there is a clear ordering of $ values. Instead, use fct_collapse(), recognizing that the values you don't specify will be left alone.
+```{r}
+gss_cat %>%
+  mutate(
+    rincome =
+      fct_collapse(
+        rincome,
+        `Unknown` = c("No answer", "Don't know", "Refused", "Not applicable"),
+        `Lt $5000` = c("Lt $1000", str_c(
+          "$", c("1000", "3000", "4000"),
+          " to ", c("2999", "3999", "4999")
+        )),
+        `$5000 to 10000` = str_c(
+          "$", c("5000", "6000", "7000", "8000"),
+          " to ", c("5999", "6999", "7999", "9999")
+        )
+      )
+  ) %>%
+  ggplot(aes(x = rincome)) +
+  geom_bar() +
+  coord_flip()
+```
+
+
+# ----*Chapter 16 - Dates & Times w/ Lubridate*-----
+
+R4DS says that Lubridate isn't part of the core tidyverse pkg, so it has to be loaded with it's own call to library().
+```{r}
+library(lubridate)
+library(nycflights13) #we'll also use this for flight times & dates
+```
+
+#### 16.2 creating date/times
+
+There are three types of date/time data that refer to an instant in time:
+1. A date. Tibbles print this as <date>.
+2. A time within a day. Tibbles print this as <time>.
+3. A date-time is a date plus a time: it uniquely identifies an instant in time (typically to the nearest second). Tibbles print this as <dttm>. Elsewhere in R these are called POSIXct, but I don’t think that’s a very useful name.
+
+In this chapter we are only going to focus on dates and date-times as R doesn’t have a native class for storing times. If you need one, you can use the hms package.
+
+Date-times are substantially more complicated than dates because of the need to handle time zones, which we’ll come back to at the end of the chapter.
+
+To get the current date or date-time, you can use:
+```{r}
+now() 
+# or
+today()
+```
+
+Otherwise, there are three ways you’re likely to create a date/time:
+
+* From a string.
+* From individual date-time components.
+* From an existing date/time object.
+
+We deal with them in order below.
+
+##### 16.2.1 From strings
+
+When importing data, use the helpers provided by lubridate. They automatically work out the format once you specify the order of the component. To use them, identify the order in which year, month, and day appear in your dates, then arrange “y”, “m”, and “d” in the same order. That gives you the name of the lubridate function that will _parse_ your date. For example:
+```{r}
+ymd("2017-01-31")
+#> [1] "2017-01-31"
+mdy("January 31st, 2017")
+#> [1] "2017-01-31"
+dmy("31-Jan-2017")
+#> [1] "2017-01-31"
+```
+
+These functions also take unquoted numbers. This is the most concise way to create a single date/time object, as you might need when filtering date/time data. ymd() is short and unambiguous:
+```{r}
+bday <- ymd(19660427)
+today <- today()
+today - bday
+```
+
+ymd() and friends create dates. To create a date-time, add an underscore and one or more of “h”, “m”, and “s” to the name of the parsing function:
+```{r}
+ymd_hms("2017-01-31 20:11:59")
+#> [1] "2017-01-31 20:11:59 UTC"
+mdy_hm("01/31/2017 08:01")
+#> [1] "2017-01-31 08:01:00 UTC"
+```
+
+##### 16.2.2 From individual components
+
+Instead of a single string, sometimes you’ll have the individual components of the date-time spread across multiple columns. This is what we have in the flights data:
+```{r}
+flights |> 
+  select(year, month, day, hour, minute) |> 
+  head(4)
+```
+
+To create a date/time from this sort of input, use make_date() for dates, or make_datetime() for date-times:
+```{r}
+flights %>% 
+  select(year, month, day, hour, minute) %>% 
+  mutate(departure = make_datetime(year, month, day, hour, minute)) |> 
+  head(4)
+```
+
+Let’s do the same thing for each of the four time columns in flights. The times are represented in a slightly odd format, so we use modulus arithmetic to pull out the hour and minute components. Once I’ve created the date-time variables, I focus in on the variables we’ll explore in the rest of the chapter.
+
+I don't follow this, b.c. we haven't done functions yet.
+```{r}
+make_datetime_100 <- function(year, month, day, time) {
+  make_datetime(year, month, day, time %/% 100, time %% 100)
+}
+
+flights_dt <- flights %>% 
+  filter(!is.na(dep_time), !is.na(arr_time)) %>% 
+  mutate(
+    dep_time = make_datetime_100(year, month, day, dep_time),
+    arr_time = make_datetime_100(year, month, day, arr_time),
+    sched_dep_time = make_datetime_100(year, month, day, sched_dep_time),
+    sched_arr_time = make_datetime_100(year, month, day, sched_arr_time)
+  ) %>% 
+  select(origin, dest, ends_with("delay"), ends_with("time"))
+
+flights_dt
+```
+
+With this data, I can visualise the distribution of departure times across the year
+```{r}
+flights_dt %>% 
+  ggplot(aes(dep_time)) + 
+  geom_freqpoly(binwidth = 86400) # 86400 seconds = 1 day
+```
+
+Or within a single day:
+
+```{r}
+flights_dt %>% 
+  filter(dep_time < ymd(20130102)) %>% #this is to select just 1 date
+  ggplot(aes(dep_time)) + 
+  geom_freqpoly(binwidth = 600) # 600 s = 10 minutes
+```
+
+##### 16.2.3 From other types
+
+You may want to switch between a date-time and a date. That’s the job of as_datetime() and as_date():
+```{r}
+as_date(now())
+as_datetime(today())
+as_datetime(now())
+```
+
+##### 16.2.4 Exercises
+
+1. What happens if you parse a string that contains invalid dates? (returns an NA with a warning)
+```{r}
+ymd(c("2010-10-10", "bananas"))
+```
+
+2. What does the tzone argument to today() do? Why is it important?
+```{r}
+today(tzone = "GMT")
+```
+
+3. Use the appropriate lubridate function to parse each of the following dates:
+```{r}
+d1 <- "January 1, 2010"
+d2 <- "2015-Mar-07"
+d3 <- "06-Jun-2017"
+d4 <- c("August 19 (2015)", "July 1 (2015)")
+d5 <- "12/30/14" # Dec 30, 2014
+```
+
+```{r}
+#This was easy, but just had to refer to above
+mdy(d1)
+ymd(d2)
+dmy(d3)
+mdy(d4)
+mdy(d5)
+```
+
+#### 16.3 Date-time components
+
+##### 16.3.1 Getting components from dates
+
+You can pull out individual parts of the date with the accessor functions year(), month(), mday() (day of the month), yday() (day of the year), wday() (day of the week), hour(), minute(), and second().
+```{r}
+year(mdy(d1)) #otherwise, d1 itself isn't in proper format
+yday(dmy(d3))
+wday(mdy(d5))
+```
+
+```{r}
+datetime <- ymd_hms("2016-07-08 12:34:56")
+year(datetime)
+month(datetime)
+mday(datetime)
+yday(datetime)
+wday(datetime)
+hour(datetime)
+minute(datetime)
+second(datetime)
+```
+
+For month() and wday() you can set label = TRUE to return the abbreviated name of the month or day of the week. Set abbr = FALSE to return the full name.
+```{r}
+month(datetime, label = TRUE)
+wday(datetime, label = TRUE, abbr = FALSE)
+```
+
+We can use wday() to see that more flights depart during the week than on the weekend:
+```{r}
+flights_dt %>% 
+  mutate(wday = wday(dep_time, label = TRUE)) %>% 
+  ggplot(aes(x = wday)) +
+    geom_bar(color = "blue", fill = 'white')
+```
+
+##### 16.3.2 Rounding
+
+An alternative approach to plotting individual components is to round the date to a nearby unit of time, with floor_date(), round_date(), and ceiling_date(). Each function takes a vector of dates to adjust and then the name of the unit round down (floor), round up (ceiling), or round to. This, for example, allows us to plot the number of flights per week:
+```{r}
+flights_dt %>% 
+  count(week = floor_date(dep_time, "week")) %>% 
+  ggplot(aes(week, n)) +
+    geom_line()
+```
+
+<skipped some>
+
+#### 16.4 Time spans / aritmetic with dates
+
+In this section, we'll cover three important classes that represent time spans:
+
+1. durations, which represent an exact number of seconds.
+2. periods, which represent human units like weeks and months.
+3. intervals, which represent a starting and ending point.
+
+##### 16.4.1 Durations
+
+In R, when you subtract two dates, you get a difftime object:
+```{r}
+bday <- ymd(19660427)
+today <- today()
+
+age <- today - bday
+age
+as.duration(age)
+```
+
+Durations come with a bunch of convenient constructors:
+
+```{r}
+dseconds(15)
+#> [1] "15s"
+dminutes(10)
+#> [1] "600s (~10 minutes)"
+dhours(c(12, 24))
+#> [1] "43200s (~12 hours)" "86400s (~1 days)"
+ddays(0:5)
+#> [1] "0s"                "86400s (~1 days)"  "172800s (~2 days)"
+#> [4] "259200s (~3 days)" "345600s (~4 days)" "432000s (~5 days)"
+dweeks(3)
+#> [1] "1814400s (~3 weeks)"
+dyears(1)
+#> [1] "31557600s (~1 years)"
+```
+
+##### Mathematical operations on durations
+
+You can add and multiply durations:
+```{r}
+2 * dyears(3)
+dyears(1) + dweeks(12) + dhours(15)
+```
+
+You can add and subtract durations to and from days (w/ the result always in seconds:
+
+```{r}
+tomorrow <- today() + ddays(1)
+last_year <- today() - dyears(1)
+tomorrow
+last_year
+```
+
+##### 16.4.2 Periods
+
+lubridate provides periods as a more intuitive way to work with timespans. Periods are time spans but don’t have a fixed length in seconds, instead they work with “human” times, like days and months. That allows them to work in a more intuitive way:
+
+Periods are called the same way as durations, but w/o the "d" in front (so, days(), weeks(), months())...)
+
+```{r}
+seconds(15)
+#> [1] "15S"
+minutes(10)
+#> [1] "10M 0S"
+hours(c(12, 24))
+#> [1] "12H 0M 0S" "24H 0M 0S"
+days(7)
+#> [1] "7d 0H 0M 0S"
+months(1:6)
+#> [1] "1m 0d 0H 0M 0S" "2m 0d 0H 0M 0S" "3m 0d 0H 0M 0S" "4m 0d 0H 0M 0S"
+#> [5] "5m 0d 0H 0M 0S" "6m 0d 0H 0M 0S"
+weeks(3)
+#> [1] "21d 0H 0M 0S"
+years(1)
+#> [1] "1y 0m 0d 0H 0M 0S"
+```
+
+You can add and multiply periods, and of course, add them to dates. Compared to durations, periods are more likely to do what you expect::
+```{r}
+# A leap year
+ymd("2016-01-01") + dyears(1)
+#> [1] "2016-12-31 06:00:00 UTC"
+ymd("2016-01-01") + years(1)
+#> [1] "2017-01-01"
+```
+
+Let’s use periods to fix an oddity related to our flight dates. Some planes (> 10k cases!) appear to have arrived at their destination before they departed from New York City.
+```{r}
+flights_dt %>% 
+  filter(arr_time < dep_time) 
+```
+
+These are overnight flights. We used the same date information for both the departure and the arrival times, but these flights arrived on the following day. We can fix this by adding days(1) to the arrival time of each overnight flight.
+```{r}
+flights_dt <- flights_dt %>% 
+  mutate(
+    overnight = arr_time < dep_time,
+    arr_time = arr_time + days(overnight * 1),
+    sched_arr_time = sched_arr_time + days(overnight * 1)
+  )
+```
+
+Now they're all fixed (0 cases):
+```{r}
+flights_dt %>% 
+  filter(overnight, arr_time < dep_time)
+```
+
+##### 16.4.3 Intervals
+
+To deal with accurate measurements between two times, use intervals. An interval is a duration with a starting point: that makes it precise so you can determine exactly how long it is:
+```{r}
+next_year <- today() + years(1)
+(today() %--% next_year) / ddays(1)
+```
+
+#### 16.4.4 Summary
+
+How do you pick between duration, periods, and intervals? As always, pick the simplest data structure that solves your problem. If you only care about physical time, use a duration; if you need to add human times, use a period; if you need to figure out how long a span is in human units, use an interval.
+
+
+
+# ----*For the remainder of the book, see the following*----
+
+* Up next is pipes, functions, vectors, and iteration in R4DS_code_Program(17-21).Rmd
+
+* Then for model basics, model building, and many models, see R4DS_code_Model(22-25).Rmd
+
+* Finally is R Markdown, Graphics for communication, R Markdown formats, and R Markdown workflow, which are in the file R4DS_code_Communicate(26-30).Rmd
